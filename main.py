@@ -1,11 +1,12 @@
-from googleapiclient.discovery import build
 import os
+from openai import OpenAI
+from googleapiclient.discovery import build
 from youtube_transcript_api import YouTubeTranscriptApi
 
-# Set your API key as an environment variable or directly assign it here
-api_key = os.environ.get('YOUTUBE_API_KEY')  # Replace with your actual API key
+# Set your API keys as an environment variable in your OS or IDE
+api_key = os.environ.get('YOUTUBE_API_KEY')
 
-def get_playlist_videos(playlist_id):
+def get_playlist_video_data(playlist_id):
     try:
         youtube = build('youtube', 'v3', developerKey=api_key)
         request = youtube.playlistItems().list(
@@ -15,21 +16,23 @@ def get_playlist_videos(playlist_id):
         )
         response = request.execute()
         videos = [item['snippet']['resourceId']['videoId'] for item in response['items']]
-        return videos
+        playlist_data = [
+            {
+                'playlistId': item['snippet']['playlistId'],
+                'channelTitle': item['snippet']['channelTitle'],
+                'channelId': item['snippet']['channelId'],
+                'title': item['snippet']['title'],
+                'videoId': item['snippet']['resourceId']['videoId'],
+                # 'endAt': item['contentDetails']['endAt'],
+                'description': item['snippet']['description'],
+                # 'thumbnailUrl': item['snippet']['thumbnails']['url']
+            }
+            for item in response['items']
+        ]
+        return playlist_data
     except Exception as e:
         print(f"Error: {str(e)}")
         return []
-
-def get_video_title(video_id):
-    try:
-        youtube = build('youtube', 'v3', developerKey=api_key)
-        request = youtube.videos().list(part='snippet', id=video_id)
-        response = request.execute()
-        video_title = response['items'][0]['snippet']['title']
-        return video_title
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return None
 
 def get_transcript_with_timestamps(video_id):
     try:
@@ -47,17 +50,52 @@ def save_to_file(text, filename):
     except Exception as e:
         print(f"Error saving file: {str(e)}")
 
-# Replace 'PLAYLIST_ID' with the ID of the YouTube playlist
-playlist_id = 'PLqR0DrEFzD9ufgr22HZod71yFKMqekKwp'
-videos_in_playlist = get_playlist_videos(playlist_id)
+def summarize_text(text):
+  try:
+      client = OpenAI()
+      response = client.chat.completions.create(
+          model="gpt-3.5-turbo-1106",
+          # api_key=os.environ['OPENAI_API_KEY'],  # this is also the default, it can be omitted
+          messages=[
+            {"role": "system", "content": "You summarize YouTube videos solely on the video's transcript. Explain and highlight core concepts and key points in great detail."},
+            {"role": "user", "content": text}
+          ],
+          # max_tokens=150  # Adjust the length of the summary as needed
+      )
+      return response.choices[0].message.content
+  except Exception as e:
+      print(f"Error: {str(e)}")
+      return None
 
-for video_id in videos_in_playlist:
-    video_title = get_video_title(video_id)
-    if video_title:
-        print(f"Processing video: {video_title}")
-        transcript = get_transcript_with_timestamps(video_id)
+# Compare Pricing
+# https://openai.com/pricing
+# Monitor Your Usage
+# https://platform.openai.com/usage
+# SET TO TRUE TO ENABLE SUMMARIZATION
+# THIS WILL REQUIRE A FREE OPENAI API KEY AND TOKENS PURCHASED
+USE_AI = False
+
+# Replace 'PLAYLIST_ID' with the ID of the YouTube playlist
+playlist_id = 'PLqR0DrEFzD9v7tE8VWFXvKi2qku8nIQIg'
+playlist_data = get_playlist_video_data(playlist_id)
+
+for item in playlist_data:
+    if item["videoId"]:
+        print(f"Processing video: {item['title']}")
+        transcript = get_transcript_with_timestamps(item['videoId'])
         if transcript:
-            transcript_text = ''
+            full_transcript_text_only = ''
+            transcript_text_with_timestamps = ''
             for line in transcript:
-                transcript_text += f"{line['text']} ({line['start']} - {line['start'] + line['duration']})\n"
-            save_to_file(transcript_text, f'{video_title}_transcript.txt')
+                transcript_text_with_timestamps += f"{line['text']} ({line['start']} - {line['start'] + line['duration']})\n"
+                full_transcript_text_only += f"{line['text']} "
+            save_to_file(transcript_text_with_timestamps, f'{item["title"]} - transcript.txt')
+            print(full_transcript_text_only)
+
+            # CANT USE ALL YOUR TOKENS!
+            if USE_AI:
+                summarized_text = summarize_text(full_transcript_text_only)
+                if summarized_text:
+                    print("Summarized Text:")
+                    print(summarized_text)
+                    save_to_file(summarized_text, f'{item["title"]} - transcript.txt')
