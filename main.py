@@ -1,9 +1,9 @@
-from googleapiclient.discovery import build
 import os
+from googleapiclient.discovery import build
 from youtube_transcript_api import YouTubeTranscriptApi
 
-# Set your API key as an environment variable or directly assign it here
-api_key = os.environ.get('YOUTUBE_API_KEY')  # Replace with your actual API key
+# Set your API keys as an environment variable in your OS or IDE
+api_key = os.environ.get('YOUTUBE_API_KEY')
 
 def get_playlist_videos(playlist_id):
     try:
@@ -48,7 +48,7 @@ def save_to_file(text, filename):
         print(f"Error saving file: {str(e)}")
 
 # Replace 'PLAYLIST_ID' with the ID of the YouTube playlist
-playlist_id = 'PLqR0DrEFzD9ufgr22HZod71yFKMqekKwp'
+playlist_id = 'PLqR0DrEFzD9t_PsH_jNKuhy7-oA11VlG6'
 videos_in_playlist = get_playlist_videos(playlist_id)
 
 for video_id in videos_in_playlist:
@@ -57,7 +57,10 @@ for video_id in videos_in_playlist:
         print(f"Processing video: {video_title}")
         transcript = get_transcript_with_timestamps(video_id)
         if transcript:
-            transcript_text = ''
+            full_transcript_text_only = ''
+            transcript_text_with_timestamps = ''
             for line in transcript:
-                transcript_text += f"{line['text']} ({line['start']} - {line['start'] + line['duration']})\n"
-            save_to_file(transcript_text, f'{video_title}_transcript.txt')
+                transcript_text_with_timestamps += f"{line['text']} ({line['start']} - {line['start'] + line['duration']})\n"
+                full_transcript_text_only += f"{line['text']} "
+            save_to_file(transcript_text_with_timestamps, f'{video_title} - transcript.txt')
+            print(full_transcript_text_only)
