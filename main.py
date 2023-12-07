@@ -5,7 +5,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 # Set your API keys as an environment variable in your OS or IDE
 api_key = os.environ.get('YOUTUBE_API_KEY')
 
-def get_playlist_videos(playlist_id):
+def get_playlist_video_data(playlist_id):
     try:
         youtube = build('youtube', 'v3', developerKey=api_key)
         request = youtube.playlistItems().list(
@@ -14,22 +14,22 @@ def get_playlist_videos(playlist_id):
             maxResults=50  # Adjust this value to fetch more videos if needed
         )
         response = request.execute()
-        videos = [item['snippet']['resourceId']['videoId'] for item in response['items']]
-        return videos
+        playlist_data = [
+            {
+                'playlistId': item['snippet']['playlistId'],
+                'channelTitle': item['snippet']['videoOwnerChannelTitle'],
+                'channelId': item['snippet']['videoOwnerChannelId'],
+                'title': item['snippet']['title'],
+                'videoId': item['snippet']['resourceId']['videoId'],
+                'description': item['snippet']['description'],
+                'thumbnailUrl': item['snippet']['thumbnails']['maxres']['url']
+            }
+            for item in response['items']
+        ]
+        return playlist_data
     except Exception as e:
         print(f"Error: {str(e)}")
         return []
-
-def get_video_title(video_id):
-    try:
-        youtube = build('youtube', 'v3', developerKey=api_key)
-        request = youtube.videos().list(part='snippet', id=video_id)
-        response = request.execute()
-        video_title = response['items'][0]['snippet']['title']
-        return video_title
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return None
 
 def get_transcript_with_timestamps(video_id):
     try:
@@ -47,20 +47,34 @@ def save_to_file(text, filename):
     except Exception as e:
         print(f"Error saving file: {str(e)}")
 
-# Replace 'PLAYLIST_ID' with the ID of the YouTube playlist
-playlist_id = 'PLqR0DrEFzD9t_PsH_jNKuhy7-oA11VlG6'
-videos_in_playlist = get_playlist_videos(playlist_id)
+# Path to save transcripts and summaries (must end in forward slash, i.e. '/root/folder/')
+folder_path = ''
 
-for video_id in videos_in_playlist:
-    video_title = get_video_title(video_id)
-    if video_title:
-        print(f"Processing video: {video_title}")
-        transcript = get_transcript_with_timestamps(video_id)
-        if transcript:
-            full_transcript_text_only = ''
-            transcript_text_with_timestamps = ''
-            for line in transcript:
-                transcript_text_with_timestamps += f"{line['text']} ({line['start']} - {line['start'] + line['duration']})\n"
-                full_transcript_text_only += f"{line['text']} "
-            save_to_file(transcript_text_with_timestamps, f'{video_title} - transcript.txt')
-            print(full_transcript_text_only)
+# Replace 'PLAYLIST_ID' with the ID of the YouTube playlist
+playlist_id = 'PLqR0DrEFzD9ufgr22HZod71yFKMqekKwp'
+playlist_data = get_playlist_video_data(playlist_id)
+
+for video in playlist_data:
+  if video["videoId"]:
+      print(f"Processing video: {video['title']}")
+
+      transcript = get_transcript_with_timestamps(video['videoId'])
+
+      header = f"▬▬▬▬▬▬ METADATA ▬▬▬▬▬▬\n" + f"TITLE: {video['title']}\n" + f"CHANNEL TITLE: {video['channelTitle']}\n" + f"THUMBNAIL URL: {video['thumbnailUrl']}\n" + f"VIDEO ID: {video['videoId']}\n" + f"CHANNEL ID: {video['channelId']}\n" + f"PLAYLIST ID: {video['playlistId']}\n\n" + f"DESCRIPTION: {video['description']}\n" + f"▬▬▬▬▬▬ END OF METADATA ▬▬▬▬▬▬\n\n"
+
+      filename = f'{folder_path}{video["title"][:30]} by {video["channelTitle"]}'
+
+      if transcript:
+          full_transcript_text_only = ''
+          transcript_text_with_timestamps = ''
+
+          for line in transcript:
+              line_of_text = line['text']
+              start_time = round(line['start'],2)
+              end_time = round(line['start'] + line['duration'], 2)
+              transcript_text_with_timestamps += f"{line_of_text} ({start_time} - {end_time})\n"
+              full_transcript_text_only += f"{line_of_text} "
+          save_to_file(header + transcript_text_with_timestamps, f'{filename} - (TRANSCRIPT).txt')
+          # print(full_transcript_text_only)
+      else:
+          print(f"No transcript found for video: {video['title']}")
